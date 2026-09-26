@@ -83,7 +83,7 @@ corpus = [id2word.doc2bow(text) for text in texts]    #term document frequency
 # 构建LDA模型，将选取好的最佳主题数输入参数中num_topics eta就是beta参数
 lda_model= gensim.models.ldamodel.LdaModel(corpus=corpus,
                                            id2word=id2word,
-                                           num_topics=13,#10,11,12,13,14
+                                           num_topics=13,#10,11,12,13,14,15
                                            random_state=100,
                                            update_every=1,
                                            chunksize=500,
