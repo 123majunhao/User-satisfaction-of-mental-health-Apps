@@ -1,6 +1,8 @@
-# 第三步 根据困惑度计算出来的最佳主题数，构建LDA模型，并将预测的主题概率输出
-import os.path
+#!/usr/bin/env python3
+"""Minimal revision of the original phase-specific LDA output script."""
+
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import pandas as pd
@@ -9,47 +11,68 @@ import jieba
 import gensim
 from pprint import pprint
 import gensim.corpora as corpora
-from gensim.models import CoherenceModel
 import pyLDAvis
-import pyLDAvis.gensim
+
+try:
+    import pyLDAvis.gensim_models as gensimvis
+except ImportError:
+    import pyLDAvis.gensim as gensimvis
 
 
-# 加载数据集
-data_all = pd.read_csv("D:\zhongwen.csv")
+# Change CORPUS_NAME and INPUT_PATH for the current country-phase corpus.
+CORPUS_NAME = "china_2009_2017"
+TOPIC_COUNTS = {
+    "china_2009_2017": 8,
+    "china_2018_2025": 12,
+    "us_2009_2017": 9,
+    "us_2018_2025": 10,
+}
 
-# 去除文本中的表情符号（只保留中英文和数字）
+INPUT_PATH = r"D:\zhongwen.csv"
+STOPWORDS_PATH = r"D:\stop word.txt"
+USER_DICTIONARY_PATH = r"D:\jiebaDic.txt"
+OUTPUT_PATH = r"D:\data_result.csv"
+DOMINANT_TOPIC_OUTPUT_PATH = r"D:\df_topic_sents_keywords.csv"
+NUM_TOPICS = TOPIC_COUNTS[CORPUS_NAME]
+
+
+# Load the review dataset.
+data_all = pd.read_csv(INPUT_PATH)
+
+
+# Remove punctuation and emoticons while retaining Chinese, English, and digits.
 def clear_character(sentence):
-    pattern = re.compile('[^\u4e00-\u9fa5^a-z^A-Z^0-9]')
-    line = re.sub(pattern,'',sentence)
-    new_sentence = ''.join(line.split())
-    return new_sentence
-train_text = [clear_character(data_all) for data_all in data_all['review']]
+    sentence = "" if pd.isna(sentence) else str(sentence)
+    pattern = re.compile(r"[^\u4e00-\u9fa5A-Za-z0-9]")
+    line = re.sub(pattern, "", sentence)
+    return "".join(line.split())
 
-# 添加词典 可以自行在“jiebaDci.txt”中添加希望切出来的词
-jieba.load_userdict("D:\jiebaDic.txt")
 
-# 分词
-train_seg_text = [jieba.lcut(s) for s in train_text]
+train_text = [clear_character(review) for review in data_all["review"]]
 
-# 加载停用词 可以向文件中添加本研究无意义的词
-stop_words_path = "D:\stop word.txt"
 
+# Load the custom jieba dictionary and tokenize the reviews.
+jieba.load_userdict(USER_DICTIONARY_PATH)
+train_seg_text = [jieba.lcut(text) for text in train_text]
+
+
+# Load stopwords.
 def get_stop_words():
-    return set([item.strip() for item in open(stop_words_path,'r').readlines()])
+    with open(STOPWORDS_PATH, "r", encoding="utf-8-sig") as file:
+        return {item.strip() for item in file if item.strip()}
+
 
 stopwords = get_stop_words()
 
-# 去除文本中的停用词
-def drop_stopwords(line):
-    line_clear = []
-    for word in line:
-        if word in stopwords:
-            continue
-        line_clear.append(word)
-    return line_clear
-train_st_text = [drop_stopwords(s) for s in train_seg_text]
 
-# 过滤词长，只保留中文
+def drop_stopwords(tokens):
+    return [word for word in tokens if word not in stopwords]
+
+
+train_st_text = [drop_stopwords(tokens) for tokens in train_seg_text]
+
+
+# Retain Chinese tokens containing at least two characters.
 def is_fine_word(words, min_length=2):
     line_clear = []
     rule = re.compile(r"^[\u4e00-\u9fa5]+$")
@@ -57,74 +80,115 @@ def is_fine_word(words, min_length=2):
         if len(word) >= min_length and re.search(rule, word):
             line_clear.append(word)
     return line_clear
-train_fine_text = [is_fine_word(s,min_length=2) for s in train_st_text]
 
-#构建bigram 和 trigram 将一些高频词合并成一个单词
-bigram = gensim.models.Phrases(train_fine_text,min_count=5,threshold=5)  # threshold是阈值，阈值越高，短语越少
-trigram = gensim.models.Phrases(bigram[train_fine_text],threshold=5)
+
+train_fine_text = [
+    is_fine_word(tokens, min_length=2) for tokens in train_st_text
+]
+
+
+# Build bigram and trigram models as in the original workflow.
+bigram = gensim.models.Phrases(train_fine_text, min_count=5, threshold=5)
+trigram = gensim.models.Phrases(bigram[train_fine_text], threshold=5)
 
 bigram_mod = gensim.models.phrases.Phraser(bigram)
 trigram_mod = gensim.models.phrases.Phraser(trigram)
 
+
 def make_bigram(texts):
-    return [bigram_mod[doc] for doc in texts]
+    return [bigram_mod[document] for document in texts]
+
 
 def make_trigram(texts):
-    return [trigram_mod[doc] for doc in texts]
+    return [trigram_mod[document] for document in texts]
+
 
 data_words_bigrams = make_bigram(train_fine_text)
 data_words_trigrams = make_trigram(train_fine_text)
 
-#构建词典 语料向量化表示
-id2word = corpora.Dictionary(train_fine_text)     #create dictionary
-texts = train_fine_text                          #create corpus
-corpus = [id2word.doc2bow(text) for text in texts]    #term document frequency
-#alpha = [0.15,0.1,0.1,0.09,0.08,0.07,0.06,0.05,0.05,0.04,0.04,0.03]
-# 构建LDA模型，将选取好的最佳主题数输入参数中num_topics eta就是beta参数
-lda_model= gensim.models.ldamodel.LdaModel(corpus=corpus,
-                                           id2word=id2word,
-                                           num_topics=13,#10,11,12,13,14,15
-                                           random_state=100,
-                                           update_every=1,
-                                           chunksize=500,
-                                           passes=20,
-                                           eta='auto',#auto
-                                           alpha='asymmetric',#asymmetric, auto
-                                           per_word_topics=True)
+
+# Build the dictionary and bag-of-words corpus.
+# The original model used train_fine_text rather than the phrase outputs.
+id2word = corpora.Dictionary(train_fine_text)
+texts = train_fine_text
+corpus = [id2word.doc2bow(text) for text in texts]
+
+
+# Fit the LDA model using the parameter settings reported in the supplement.
+lda_model = gensim.models.ldamodel.LdaModel(
+    corpus=corpus,
+    id2word=id2word,
+    num_topics=NUM_TOPICS,
+    random_state=100,
+    update_every=1,
+    chunksize=500,
+    passes=20,
+    eta=0.1,  # beta in the manuscript
+    alpha=0.1,
+    per_word_topics=True,
+)
+
 print(lda_model.alpha)
 print(lda_model.eta)
-pprint(lda_model.print_topics(num_topics=13,num_words=30)) # 显示每个主题排名前30的关键词
-# 获取各个评论在所有主题上的概率
-doc_topic = lda_model.get_document_topics(bow=corpus,minimum_probability=0)
-topic_score = pd.DataFrame(doc_topic,columns=["Topic {}".format(i) for i in range(0, 13)]) #记得根据主题数修改range
-# 结果导出
-result = data_all.join(topic_score)
-result.to_csv('D:\data_result.csv',encoding="utf-8")
+pprint(
+    lda_model.print_topics(
+        num_topics=NUM_TOPICS,
+        num_words=30,
+    )
+)
 
-#获取每个文档的最佳主题，由此可以回溯到某个主题的代表文档，查看其内容
+
+# Export a numeric document-topic probability matrix.
+doc_topic = []
+for document in corpus:
+    distribution = dict(
+        lda_model.get_document_topics(
+            bow=document,
+            minimum_probability=0,
+            per_word_topics=False,
+        )
+    )
+    doc_topic.append(
+        [distribution.get(topic_id, 0.0) for topic_id in range(NUM_TOPICS)]
+    )
+
+topic_score = pd.DataFrame(
+    doc_topic,
+    columns=[f"Topic {topic_id}" for topic_id in range(NUM_TOPICS)],
+)
+
+result = data_all.reset_index(drop=True).join(topic_score)
+result.to_csv(OUTPUT_PATH, index=False, encoding="utf-8-sig")
+
+
+# Export the dominant topic and its probability for each review.
 def format_topics_sentences(ldamodel=lda_model, corpus=corpus, texts=texts):
-    sent_topics_df = pd.DataFrame()
-    # Get main topic in each document
-    for i, row in enumerate(ldamodel[corpus]):
-        row = sorted(row, key=lambda x: (x[1]), reverse=True) #对每个文档的主题按概率排序
-        # Get the Dominant topic, Perc Contribution  for each document
-        for j, (topic_num, prop_topic) in enumerate(row):
-            if j == 0:   #确定最佳主题
-                wp = ldamodel.show_topic(topic_num)
-                sent_topics_df = sent_topics_df._append(pd.Series([int(topic_num), round(prop_topic, 4)]), ignore_index=True)
-            else:
-                break
-    sent_topics_df.columns = ['Dominant_Topic', 'Perc_Contribution']
-    contents = pd.Series(texts)
-    sent_topics_df = pd.concat([sent_topics_df, contents], axis=1)
-    return(sent_topics_df)
-
-df_topic_sents_keywords = format_topics_sentences(ldamodel=lda_model, corpus=corpus, texts=texts)
-#获得每个doc的最可能主题及概率
-df_topic_sents_keywords.to_csv('D:\df_topic_sents_keywords.csv',encoding="utf-8")
-
-#LDAvis可视化，根据可视化结果判断聚类效果，各主题尽量分散不重叠
-d = pyLDAvis.gensim.prepare(lda_model,corpus,id2word)
-pyLDAvis.show(d)
+    rows = []
+    for document, content in zip(corpus, texts):
+        distribution = ldamodel.get_document_topics(
+            bow=document,
+            minimum_probability=0,
+            per_word_topics=False,
+        )
+        topic_num, prop_topic = max(distribution, key=lambda item: item[1])
+        rows.append(
+            {
+                "Dominant_Topic": int(topic_num),
+                "Perc_Contribution": round(float(prop_topic), 4),
+                "Processed_Text": content,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
+df_topic_sents_keywords = format_topics_sentences()
+df_topic_sents_keywords.to_csv(
+    DOMINANT_TOPIC_OUTPUT_PATH,
+    index=False,
+    encoding="utf-8-sig",
+)
+
+
+# Visualize the fitted LDA model.
+visualization = gensimvis.prepare(lda_model, corpus, id2word)
+pyLDAvis.show(visualization)
