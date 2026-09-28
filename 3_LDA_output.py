@@ -83,7 +83,7 @@ corpus = [id2word.doc2bow(text) for text in texts]    #term document frequency
 # 构建LDA模型，将选取好的最佳主题数输入参数中num_topics eta就是beta参数
 lda_model= gensim.models.ldamodel.LdaModel(corpus=corpus,
                                            id2word=id2word,
-                                           num_topics=13,#19,14,17,15,18
+                                           num_topics=10,#19,14,17,15,18
                                            random_state=100,
                                            update_every=1,
                                            chunksize=500,
@@ -93,10 +93,10 @@ lda_model= gensim.models.ldamodel.LdaModel(corpus=corpus,
                                            per_word_topics=True)
 print(lda_model.alpha)
 print(lda_model.eta)
-pprint(lda_model.print_topics(num_topics=13,num_words=30)) # 显示每个主题排名前30的关键词
+pprint(lda_model.print_topics(num_topics=10,num_words=30)) # 显示每个主题排名前30的关键词
 # 获取各个评论在所有主题上的概率
 doc_topic = lda_model.get_document_topics(bow=corpus,minimum_probability=0)
-topic_score = pd.DataFrame(doc_topic,columns=["Topic {}".format(i) for i in range(0, 13)]) #记得根据主题数修改range
+topic_score = pd.DataFrame(doc_topic,columns=["Topic {}".format(i) for i in range(0, 10)]) #记得根据主题数修改range
 # 结果导出
 result = data_all.join(topic_score)
 result.to_csv('D:\data_result.csv',encoding="utf-8")
