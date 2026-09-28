@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Minimal revision of the original phase-specific LDA output script."""
 
 import warnings
 
