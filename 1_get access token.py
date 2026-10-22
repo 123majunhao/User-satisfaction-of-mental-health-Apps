@@ -4,7 +4,6 @@ import urllib.request
 import urllib.parse
 import urllib.request
 
-
 #data=pd.read_csv('E:\qinggan.csv',encoding='utf-8')
 #review_list=data.review
 
