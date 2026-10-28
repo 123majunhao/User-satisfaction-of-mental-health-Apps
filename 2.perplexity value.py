@@ -78,9 +78,9 @@ def computer_perplexity_values(testset,dictionary,size_dictionary,limit,start,st
                                                     num_topics=num_topics,
                                                     random_state=100,
                                                     update_every=1,
-                                                    chunksize=100,
-                                                    passes=10,
-                                                    eta=0.1,
+                                                    chunksize=500,
+                                                    passes=20,
+                                                    eta="auto",
                                                     alpha='asymmetric',
                                                     per_word_topics=True)
         
