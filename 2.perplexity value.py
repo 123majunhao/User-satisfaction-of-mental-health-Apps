@@ -109,7 +109,7 @@ def computer_perplexity_values(testset,dictionary,size_dictionary,limit,start,st
                     prob_topic = doc_topics_list[i][topic_id][1]
                     prob_topic_word = topic_word_list[topic_id][word]
                     prob_word += prob_topic * prob_topic_word
-                prob_doc += math.log(prob_word)
+                prob_doc += num * math.log(prob_word)
             prob_doc_sum += prob_doc
             testset_word_num += doc_word_num
         prep = math.exp(-prob_doc_sum / testset_word_num)
