@@ -1,4 +1,10 @@
 import delimited D:\data1.csv, varnames(1) clear   
+
+regress pd x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13
+estat vif
+regress nd x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13
+estat vif
+
 tobit pd x1-x13,ll(0) ul(4)
 est store m1   
 tobit nd x1-x13,ll(0) ul(4)
