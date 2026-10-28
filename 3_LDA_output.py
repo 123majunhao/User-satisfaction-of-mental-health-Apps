@@ -84,8 +84,25 @@ print(lda_model.alpha)
 print(lda_model.eta)
 pprint(lda_model.print_topics(num_topics=13,num_words=30)) 
 
-doc_topic = lda_model.get_document_topics(bow=corpus,minimum_probability=0)
-topic_score = pd.DataFrame(doc_topic,columns=["Topic {}".format(i) for i in range(0, 13)]) 
+doc_topic = lda_model.get_document_topics(
+    bow=corpus,
+    minimum_probability=0,
+    per_word_topics=False
+)
+
+topic_score = pd.DataFrame(
+    [dict(row) for row in doc_topic],
+    index=data_all.index
+)
+
+topic_score = topic_score.reindex(
+    columns=range(lda_model.num_topics),
+    fill_value=0.0
+).fillna(0.0)
+
+topic_score.columns = [
+    f"Topic {i}" for i in range(lda_model.num_topics)
+]
 
 result = data_all.join(topic_score)
 result.to_csv('D:\data_result.csv',encoding="utf-8")
